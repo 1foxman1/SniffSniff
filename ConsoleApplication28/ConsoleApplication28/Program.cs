@@ -72,7 +72,7 @@ namespace ConsoleApplication28
                 deviceNumber = i;                               // sets global integer to device number to pass it on to the right thread
                 recievers[i] = new Thread(CaptureStarter);      //creates thread
                 recievers[i].Start();                           // starts thread
-                Thread.Sleep(40);                               //thread sleeps for a while to let the just opened thread to finish it's initialisation
+                Thread.Sleep(60);                               //thread sleeps for a while to let the just opened thread to finish it's initialisation
             }
         }
 
